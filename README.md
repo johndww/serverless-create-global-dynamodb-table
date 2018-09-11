@@ -3,7 +3,7 @@
 
 This is a fork of serverless-create-global-dynamodb-table with additional bugfixes.
 
-A [serverless](http://www.serverless.com) plugin to _automatically_ creates dynamodb global table(s).
+A [serverless](http://www.serverless.com) plugin to _automatically_ creates and cleans up dynamodb global table(s).
 The plugin will create the dynamodb table in the specified region(s) and setup sync between  primary and other table(s).
 
 ## Install
@@ -19,17 +19,20 @@ plugins:
 
 ## Configuration
 
+
 ```yaml
 custom:
   globalTables:
     - regions: # list of regions in which you want to set up global tables
       - region-1
       - region-2
-      tableKey: 'TABLE_KEY' # Cloudformation output key name if the table is created as part of same serverless service
-      tableName: 'TABLE_NAME' # if table is not part of the service then specify the table name. If tableKey param exists then tableName is ignored.
-      tags: # List of tags that needs to applied to the new table (optional)
+    tableName: 'TABLE_NAME' # *RECOMMENDED* if table is not part of the service then specify the table name. If tableKey param exists then tableName is ignored.
+    tableKey: 'TABLE_KEY' # Cloudformation output key name if the table is created as part of same serverless service. does not support resource removal
+    tags: # List of tags that needs to applied to the new table (optional)
       - Key: tag-key
         Value: tag-value
       - Key: tag-key-2
         Value: tag-value-2
 ```
+
+**Global table cleanup is currently only supported using tableName configuration
