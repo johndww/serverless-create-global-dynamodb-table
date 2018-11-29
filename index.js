@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk')
 const chalk = require('chalk')
+const objPath = require('object-path')
 
 /**
  * Create dynamodb table.
@@ -16,13 +17,11 @@ const createAndTagTable = async function createAndTagTable(region, tableName, se
     region,
   })
   try {
-
     try {
-      await dynamodb.describeTable({TableName: tableName}).promise();
-      cli.consoleLog(`CreateGlobalTable: ${chalk.yellow('Backup region table already exists in ${region}. Skipping creation...')}`);
+      await dynamodb.describeTable({ TableName: tableName }).promise()
+      cli.consoleLog(`CreateGlobalTable: ${chalk.yellow('Backup region table already exists in ${region}. Skipping creation...')}`)
       return
-    }
-    catch (e) {
+    } catch (e) {
       if (e.code !== 'ResourceNotFoundException') {
         throw e
       }
@@ -41,6 +40,39 @@ const createAndTagTable = async function createAndTagTable(region, tableName, se
       cli.consoleLog(`CreateGlobalTable: ${chalk.yellow(`Table ${tableName} already exists in the region ${region}`)}`)
     }
     throw error
+  }
+}
+
+/**
+ * Creates table parameters
+ * @param tableName
+ * @param tableDef
+ * @returns {{AttributeDefinitions: DocumentClient.AttributeDefinitions, KeySchema: DocumentClient.KeySchema, BillingMode: DocumentClient.BillingMode, TableName: *, StreamSpecification: {StreamEnabled: boolean, StreamViewType: string}}}
+ */
+function createTableParams(tableName, tableDef) {
+  const { ReadCapacityUnits, WriteCapacityUnits } = tableDef.Table.ProvisionedThroughput
+  const params = {
+    AttributeDefinitions: tableDef.Table.AttributeDefinitions,
+    KeySchema: tableDef.Table.KeySchema,
+    TableName: tableName,
+    StreamSpecification: {
+      StreamEnabled: true,
+      StreamViewType: 'NEW_AND_OLD_IMAGES',
+    },
+  }
+
+  const BillingMode = objPath.get(tableDef, 'Table.BillingModeSummary.BillingMode')
+
+  if (BillingMode && BillingMode === 'PAY_PER_REQUEST') {
+    return Object.assign({}, params, { BillingMode })
+  } else {
+    return Object.assign({}, params, {
+      ProvisionedThroughput: {
+        ReadCapacityUnits,
+        WriteCapacityUnits,
+      },
+      BillingMode: 'PROVISIONED',
+    })
   }
 }
 
@@ -81,19 +113,9 @@ const createGlobalTable = async function createGlobalTable(
 
   const tableDef = await dynamodb.describeTable({ TableName: tableName }).promise()
 
-  const { ReadCapacityUnits, WriteCapacityUnits } = tableDef.Table.ProvisionedThroughput
-  const createTableParams = {
-    AttributeDefinitions: tableDef.Table.AttributeDefinitions,
-    KeySchema: tableDef.Table.KeySchema,
-    ProvisionedThroughput: { ReadCapacityUnits, WriteCapacityUnits },
-    TableName: tableName,
-    StreamSpecification: {
-      StreamEnabled: true,
-      StreamViewType: 'NEW_AND_OLD_IMAGES',
-    },
-  }
+  const tableParams = createTableParams(tableName, tableDef)
 
-  await Promise.all(newRegions.map(r => createAndTagTable(r, tableName, createTableParams, tags, cli, creds)))
+  await Promise.all(newRegions.map(r => createAndTagTable(r, tableName, tableParams, tags, cli, creds)))
 
   const replicationGroup = [{ RegionName: region }]
   newRegions.forEach(r => replicationGroup.push({ RegionName: r }))
